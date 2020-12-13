@@ -1,0 +1,122 @@
+<div class="ee_wrapper" style="height: 80%;">
+    <div class="ee_body">
+        <div class="ee_styling"></div>
+        <div class="ee_text_wrapper">
+            <textarea class="ee_textarea" spellcheck="false"></textarea>
+        </div>
+    </div>
+</div>
+<script>
+    let ee_syncing = false;
+    let ee_mistakes, ee_text;
+    document.querySelector(".ee_textarea").addEventListener("keyup", sync_text);
+    document.querySelector(".ee_textarea").addEventListener("keyup", select_handler);
+    document.querySelector(".ee_textarea").addEventListener("click", select_handler);
+    async function sync_text() {
+        if(ee_syncing) return;
+        ee_syncing = true;
+        let text = document.querySelector(".ee_textarea").value;
+        await wait(2000);
+        while(text != document.querySelector(".ee_textarea").value) {
+            text = document.querySelector(".ee_textarea").value;
+            await wait(1000);
+        }
+        if(text == ee_text) {
+            ee_syncing = false;
+            return;
+        }
+        let styling = document.querySelector(".ee_styling");
+        let parsed = text.replace(/\n/g, " <br>").split(" ");
+        ee_mistakes = await spellchecker(text);
+        styling.innerHTML = "";
+        let index = 0, checker_index = 0;
+        for(let i = 0; i < parsed.length; i++) {
+            let length = parsed[i].length + 1;
+            if(parsed[i].includes("<br>")) length -= 4;
+            let span = document.createElement("span"), spacer = document.createElement("span");
+            span.innerHTML = parsed[i];
+            spacer.innerHTML = " ";
+            if(checker_index < ee_mistakes.length) {
+                let c = ee_mistakes[checker_index];
+                if(index + length > c.offset) {
+                    span.classList.add("mistake", "mistake_"+checker_index);
+                    tippy(span, {
+                        content: `${c.message}<br><b>${c.replacements ? c.replacements.map(v => v.value).slice(0,3).join(", ") : ""}</b>`,
+                        allowHTML: true
+                    });
+                    if(c.offset + c.length <= index + length) {
+                        checker_index++;
+                    }
+                }
+            }
+            styling.appendChild(span);
+            styling.appendChild(spacer);
+            index += length;
+        }
+        console.log("Text Synced.");
+        ee_text = text;
+        ee_syncing = false;
+    }
+    async function spellchecker(text) {
+        let response = await fetch("https://api.languagetoolplus.com/v2/check", {
+            body: `text=${encodeURIComponent(text)}&language=en-US`,
+            headers: {
+                "user-agent": "Elf Editor Web Application",
+                "content-type": "application/x-www-form-urlencoded",
+                "accept": "application/json"
+            },
+            method: "POST",
+            mode: "cors",
+        })
+            .then(r => r.json())
+        console.log("[Spell Checker]", response);
+        return response.matches;
+    }
+    function select_handler() {
+        let textarea = document.querySelector(".ee_textarea");
+        let start = textarea.selectionStart, end = textarea.selectionEnd;
+        for(let i = 0; i < ee_mistakes.length; i++) {
+            let m = ee_mistakes[i];
+            if(m.offset <= start && m.offset + m.length >= start) {
+                document.querySelector(".mistake_"+i)._tippy.show();
+                break;
+            }
+        }
+    }
+    function wait(t) {
+        return new Promise((resolve, reject) => {
+            setTimeout(()=>{ resolve(t) }, t);
+        });
+    }
+</script>
+<style>
+    .ee_wrapper, .ee_body, .ee_styling, .ee_text_wrapper, .ee_textarea {
+        position: relative;
+        width: 100%;
+        height: 100%;
+    }
+    .ee_body {
+        margin: 16px;
+        width: calc(100% - 32px);
+    }
+    .ee_styling, .ee_text_wrapper, .ee_reacting {
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+    .ee_styling, .ee_textarea {
+        padding: 0 2px;
+        margin: 0;
+        font: initial;
+        font-size: 16px;
+        background-color: #ffffff00;
+    }
+    .ee_styling, .ee_reacting {
+        color: #ffffff00;
+    }
+    .ee_styling > .mistake {
+        background-color: #ff000055;
+    }
+</style>
+<script src="https://unpkg.com/@popperjs/core@2"></script>
+<script src="https://unpkg.com/tippy.js@6"></script>
